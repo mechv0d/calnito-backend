@@ -1,0 +1,9 @@
+.env
+firebase-service-account.json
+__pycache__/
+.pytest_cache/
+*.pyc
+.venv/
+.idea/
+.vscode/
+.DS_Store

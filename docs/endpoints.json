@@ -1,0 +1,21 @@
+{
+  "base_url_local": "http://localhost:8000",
+  "api_prefix": "/v1",
+  "auth_header": "Authorization: Bearer <firebase_id_token>",
+  "timezone_header": "X-Timezone: Europe/Helsinki",
+  "endpoints": [
+    {"method": "GET", "path": "/health", "auth": false, "description": "Healthcheck"},
+    {"method": "GET", "path": "/v1/users/me", "auth": true, "description": "Get or create current user profile"},
+    {"method": "PATCH", "path": "/v1/users/me", "auth": true, "description": "Update current user timezone"},
+    {"method": "POST", "path": "/v1/meals", "auth": true, "content_type": "multipart/form-data", "description": "Create meal from text and optional photo"},
+    {"method": "GET", "path": "/v1/meals?from=YYYY-MM-DD&to=YYYY-MM-DD", "auth": true, "description": "List meals by local date range"},
+    {"method": "GET", "path": "/v1/meals/today", "auth": true, "description": "Today summary and meals"},
+    {"method": "GET", "path": "/v1/meals/summary/today", "auth": true, "description": "Alias for today summary"},
+    {"method": "GET", "path": "/v1/meals/by-day?date=YYYY-MM-DD", "auth": true, "description": "List meals by local day"},
+    {"method": "GET", "path": "/v1/meals/{meal_id}", "auth": true, "description": "Get one meal"},
+    {"method": "PATCH", "path": "/v1/meals/{meal_id}", "auth": true, "description": "Manual meal edit"},
+    {"method": "DELETE", "path": "/v1/meals/{meal_id}", "auth": true, "description": "Delete meal and photo"},
+    {"method": "GET", "path": "/v1/stats?from=YYYY-MM-DD&to=YYYY-MM-DD", "auth": true, "description": "Stats by date range"},
+    {"method": "POST", "path": "/v1/recommendations", "auth": true, "description": "Weekly nutrition recommendations"}
+  ]
+}

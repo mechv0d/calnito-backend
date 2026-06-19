@@ -1,0 +1,128 @@
+### Variables
+@apiUrl = http://localhost:8000
+@token = PASTE_FIREBASE_ID_TOKEN_HERE
+@timezone = Europe/Helsinki
+@mealId = PASTE_MEAL_ID_HERE
+
+### Healthcheck
+GET {{apiUrl}}/health
+
+### Get current user
+GET {{apiUrl}}/v1/users/me
+Authorization: Bearer {{token}}
+
+### Update timezone
+PATCH {{apiUrl}}/v1/users/me
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "timezone": "Europe/Helsinki"
+}
+
+### Create meal without photo
+POST {{apiUrl}}/v1/meals
+Authorization: Bearer {{token}}
+X-Timezone: {{timezone}}
+Content-Type: multipart/form-data; boundary=BoundaryMeal
+
+--BoundaryMeal
+Content-Disposition: form-data; name="description"
+
+омлет из двух яиц, хлеб и кофе с молоком
+--BoundaryMeal--
+
+### Create meal with photo
+# In VS Code REST Client, replace ./meal.jpg with a real relative path.
+POST {{apiUrl}}/v1/meals
+Authorization: Bearer {{token}}
+X-Timezone: {{timezone}}
+Content-Type: multipart/form-data; boundary=BoundaryMealPhoto
+
+--BoundaryMealPhoto
+Content-Disposition: form-data; name="description"
+
+куриная грудка, рис и салат
+--BoundaryMealPhoto
+Content-Disposition: form-data; name="photo"; filename="meal.jpg"
+Content-Type: image/jpeg
+
+< ./meal.jpg
+--BoundaryMealPhoto--
+
+### Today summary
+GET {{apiUrl}}/v1/meals/today
+Authorization: Bearer {{token}}
+X-Timezone: {{timezone}}
+
+### Today summary alias
+GET {{apiUrl}}/v1/meals/summary/today
+Authorization: Bearer {{token}}
+X-Timezone: {{timezone}}
+
+### Meals by day
+GET {{apiUrl}}/v1/meals/by-day?date=2026-06-19
+Authorization: Bearer {{token}}
+
+### Meals range
+GET {{apiUrl}}/v1/meals?from=2026-06-01&to=2026-06-19
+Authorization: Bearer {{token}}
+
+### Get one meal
+GET {{apiUrl}}/v1/meals/{{mealId}}
+Authorization: Bearer {{token}}
+
+### Change meal type
+PATCH {{apiUrl}}/v1/meals/{{mealId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "meal_type": "snacks"
+}
+
+### Change snack time
+PATCH {{apiUrl}}/v1/meals/{{mealId}}
+Authorization: Bearer {{token}}
+X-Timezone: {{timezone}}
+Content-Type: application/json
+
+{
+  "meal_type": "snacks",
+  "consumed_at": "2026-06-19T21:30:00+03:00"
+}
+
+### Manual edit items
+PATCH {{apiUrl}}/v1/meals/{{mealId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "items": [
+    {
+      "product_name": "омлет",
+      "portion_g": 180,
+      "kcal_per_100g": 154,
+      "confidence": 1
+    },
+    {
+      "product_name": "хлеб",
+      "portion_g": 40,
+      "kcal_per_100g": 250,
+      "confidence": 1
+    }
+  ]
+}
+
+### Delete meal
+DELETE {{apiUrl}}/v1/meals/{{mealId}}
+Authorization: Bearer {{token}}
+
+### Stats
+GET {{apiUrl}}/v1/stats?from=2026-06-01&to=2026-06-19
+Authorization: Bearer {{token}}
+
+### Recommendations
+POST {{apiUrl}}/v1/recommendations
+Authorization: Bearer {{token}}
+X-Timezone: {{timezone}}
