@@ -38,6 +38,9 @@ async def get_current_user(authorization: str | None = Header(default=None)) -> 
         ) from exc
 
     if decoded.get('email_verified') is not True:
+        user_record = auth.get_user(decoded['uid'])
+        if user_record.email_verified:
+            return CurrentUser(uid=decoded['uid'], email=decoded.get('email') or user_record.email)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail='Email is not verified',
