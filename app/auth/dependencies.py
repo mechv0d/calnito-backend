@@ -6,6 +6,10 @@ from firebase_admin import auth
 from app.core.config import get_settings
 from app.core.firebase import get_firebase_app
 
+import logging # TODO: Remove this when done debugging
+
+logger = logging.getLogger(__name__) # TODO: Remove this when done debugging
+
 
 @dataclass(frozen=True)
 class CurrentUser:
@@ -32,9 +36,10 @@ async def get_current_user(authorization: str | None = Header(default=None)) -> 
         get_firebase_app()
         decoded = auth.verify_id_token(token, check_revoked=settings.firebase_check_revoked)
     except Exception as exc:
+        logger.exception("Firebase token verification failed")
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail='Invalid Firebase token',
-        ) from exc
+            status_code=401,
+            detail=f"Invalid Firebase token: {type(exc).__name__}: {exc}", # TODO: Remove this when done debugging
+        )
 
     return CurrentUser(uid=decoded['uid'], email=decoded.get('email'))
