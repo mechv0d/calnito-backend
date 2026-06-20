@@ -1,5 +1,5 @@
 from functools import lru_cache
-from pydantic import AliasChoices, Field, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -46,6 +46,15 @@ class Settings(BaseSettings):
 
     user_facing_ai_error: str = Field(default='Мы проебались, Босс.', alias='USER_FACING_AI_ERROR')
 
+
+    @field_validator('supabase_url')
+    @classmethod
+    def normalize_supabase_url(cls, value: str) -> str:
+        normalized = value.rstrip('/')
+        for suffix in ('/rest/v1', '/storage/v1'):
+            if normalized.endswith(suffix):
+                return normalized.removesuffix(suffix)
+        return normalized
 
     @model_validator(mode='after')
     def validate_supabase_secret_key(self):
