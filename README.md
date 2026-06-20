@@ -242,7 +242,7 @@ GET /v1/stats?date_from=2026-06-01&date_to=2026-06-19
 POST /v1/recommendations
 ```
 
-Backend берет последние 7 дней питания и отправляет отдельный prompt в OpenAI.
+Backend берет последние 30 дней питания, собирает агрегаты и отправляет отдельный prompt в OpenAI.
 
 ## Firestore структура
 

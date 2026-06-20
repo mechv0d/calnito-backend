@@ -133,8 +133,8 @@ class AIClient:
         normalized_data = normalize_food_parse_payload(data)
         return ParsedMeal.model_validate(normalized_data)
 
-    def generate_recommendations(self, meals: list[dict]) -> str:
-        prompt = build_recommendation_prompt(meals)
+    def generate_recommendations(self, payload: dict) -> str:
+        prompt = build_recommendation_prompt(payload)
         attempts = self.settings.llm_max_retries + 1
         last_error: Exception | None = None
 

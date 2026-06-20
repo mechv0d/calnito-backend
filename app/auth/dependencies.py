@@ -37,4 +37,10 @@ async def get_current_user(authorization: str | None = Header(default=None)) -> 
             detail='Invalid Firebase token',
         ) from exc
 
+    if decoded.get('email_verified') is not True:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail='Email is not verified',
+        )
+
     return CurrentUser(uid=decoded['uid'], email=decoded.get('email'))

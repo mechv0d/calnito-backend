@@ -16,6 +16,6 @@
     {"method": "PATCH", "path": "/v1/meals/{meal_id}", "auth": true, "description": "Manual meal edit"},
     {"method": "DELETE", "path": "/v1/meals/{meal_id}", "auth": true, "description": "Delete meal and photo"},
     {"method": "GET", "path": "/v1/stats?from=YYYY-MM-DD&to=YYYY-MM-DD", "auth": true, "description": "Stats by date range"},
-    {"method": "POST", "path": "/v1/recommendations", "auth": true, "description": "Weekly nutrition recommendations"}
+    {"method": "POST", "path": "/v1/recommendations", "auth": true, "description": "30-day nutrition recommendations"}
   ]
 }

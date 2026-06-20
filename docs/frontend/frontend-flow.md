@@ -158,4 +158,4 @@ GET /v1/stats?from=2026-06-01&to=2026-06-19
 POST /v1/recommendations
 ```
 
-Backend сам берет последние 7 дней.
+Backend сам берет последние 30 дней.
