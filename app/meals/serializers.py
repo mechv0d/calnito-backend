@@ -1,16 +1,43 @@
+from __future__ import annotations
+
+import logging
+
 from app.common.enums import MealType, MEAL_TYPE_LABELS_RU
-from app.storage.supabase_storage import StorageService
+from app.storage.supabase_storage import SignedUrlError, StorageService
+
+logger = logging.getLogger(__name__)
 
 
-def meal_to_response_dict(meal: dict, storage: StorageService | None = None) -> dict:
+def meal_to_response_dict(
+    meal: dict,
+    storage: StorageService | None = None,
+    *,
+    include_photo_url: bool = False,
+) -> dict:
     meal_type = MealType(meal['meal_type'])
     photo = meal.get('photo') or {}
     storage_path = photo.get('storage_path')
     signed_url = None
 
-    if storage_path:
-        storage = storage or StorageService()
-        signed_url = storage.create_signed_url(storage_path)
+    if storage_path and include_photo_url:
+        try:
+            storage = storage or StorageService()
+            signed_url = storage.create_signed_url(storage_path)
+        except SignedUrlError:
+            logger.warning(
+                'Failed to create signed meal photo URL: meal_id=%s storage_path=%s',
+                meal.get('id'),
+                storage_path,
+                exc_info=True,
+            )
+            signed_url = None
+        except Exception:
+            logger.exception(
+                'Unexpected error while creating signed meal photo URL: meal_id=%s storage_path=%s',
+                meal.get('id'),
+                storage_path,
+            )
+            signed_url = None
 
     return {
         'id': meal['id'],

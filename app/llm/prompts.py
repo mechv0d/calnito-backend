@@ -78,10 +78,11 @@ def build_recommendation_prompt(payload: dict) -> str:
         indent=2,
     )
 
+    summary = payload.get("summary", {}) if isinstance(payload, dict) else {}
     logger.info(
         "Building nutrition recommendation prompt: meals_count=%s, total_calories=%s",
-        payload.get("summary", {}).get("meals_count"),
-        payload.get("summary", {}).get("total_calories"),
+        summary.get("meals_count") if isinstance(summary, dict) else None,
+        summary.get("total_calories") if isinstance(summary, dict) else None,
     )
 
     # logger.debug("Nutrition recommendation payload:\n%s", payload_json_for_debug)
@@ -120,5 +121,44 @@ def build_recommendation_prompt(payload: dict) -> str:
 5. Если данных мало — коротко напомни, что рекомендации предварительные.
 
 Данные в формате nutrition_recommendations:
+{payload_json_for_model}
+""".strip()
+
+def build_next_meal_recommendation_prompt(payload: dict) -> str:
+    payload_json_for_model = json.dumps(
+        payload,
+        ensure_ascii=False,
+        default=str,
+        separators=(',', ':'),
+    )
+
+    logger.info(
+        "Building next meal recommendation prompt: target=%s meals_count=%s",
+        payload.get('target_meal', {}).get('meal_type'),
+        payload.get('data_quality', {}).get('meals_count'),
+    )
+
+    return f"""
+Ты — практичный помощник по питанию внутри приложения-дневника еды.
+
+Твоя задача:
+Посоветовать, что пользователю можно съесть на следующий прием пищи, учитывая его ЗАЛОГИРОВАННЫЕ записи, текущие дату/время и целевой тип приема пищи.
+
+Критически важно:
+1. Данные — это только то, что пользователь внес в приложение. Не утверждай, что это весь рацион.
+2. Если записей мало, скажи, что рекомендация предварительная.
+3. Не ставь медицинские диагнозы и не назначай лечение, анализы, БАДы или строгие диеты.
+4. Не делай вид, что знаешь вес, рост, цели, заболевания, активность или анализы пользователя, если этого нет в данных.
+5. Не выдумывай точные нормы БЖУ. Можно дать бытовые ориентиры: добавить овощи, белок, крупу/сложные углеводы, уменьшить жирный соус и переработанное мясо.
+6. Используй kcal_per_100g только как подсказку о калорийной плотности.
+7. Ответ должен быть текстом для пользователя, без JSON.
+
+Формат ответа:
+1. Коротко: что лучше выбрать на этот прием пищи.
+2. 2–3 варианта блюд или сборок.
+3. Что лучше сегодня не усиливать, если это видно по данным.
+4. Одна короткая фраза-напоминание, что вывод предварительный, если данных мало.
+
+Данные в формате next_meal_recommendation:
 {payload_json_for_model}
 """.strip()

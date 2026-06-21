@@ -11,11 +11,11 @@ from app.llm.client import AIClient
 from app.llm.exceptions import AIExhaustedError
 from app.meals.calculations import build_items_from_manual, build_items_from_parsed, calculate_totals
 from app.meals.context import FoodContextService
-from app.meals.models import MealUpdateRequest
+from app.meals.models import ManualMealCreateRequest, MealUpdateRequest
 from app.meals.repository import MealRepository
 from app.meals.serializers import meal_to_response_dict
 from app.storage.images import ImageProcessingError, process_food_photo
-from app.storage.supabase_storage import StorageService
+from app.storage.supabase_storage import SignedUrlError, StorageService
 
 
 class MealService:
@@ -32,8 +32,12 @@ class MealService:
             self._storage = StorageService()
         return self._storage
 
-    def _meal_response(self, meal: dict) -> dict:
-        return meal_to_response_dict(meal, self._storage)
+    @storage.setter
+    def storage(self, value: StorageService) -> None:
+        self._storage = value
+
+    def _meal_response(self, meal: dict, *, include_photo_url: bool = False) -> dict:
+        return meal_to_response_dict(meal, self._storage, include_photo_url=include_photo_url)
 
     async def create_meal(
         self,
@@ -103,7 +107,7 @@ class MealService:
             }
 
             self.repo.create(uid, meal_id, meal)
-            return self._meal_response(meal)
+            return self._meal_response(meal, include_photo_url=True)
         except AIExhaustedError as exc:
             if uploaded_storage_path:
                 self.storage.remove_file(uploaded_storage_path)
@@ -112,6 +116,122 @@ class MealService:
             if uploaded_storage_path:
                 self.storage.remove_file(uploaded_storage_path)
             raise
+
+    def create_manual_meal(
+        self,
+        uid: str,
+        payload: ManualMealCreateRequest,
+        timezone_name: str | None,
+    ) -> dict:
+        tz = self._resolve_tz(timezone_name)
+        current_utc = now_utc()
+        consumed_at_utc = payload.consumed_at.astimezone(timezone.utc)
+        meal_id = uuid4().hex
+        items = build_items_from_manual(payload.items)
+        totals = calculate_totals(items)
+
+        meal = {
+            'id': meal_id,
+            'uid': uid,
+            'description': payload.description.strip(),
+            'meal_type': payload.meal_type.value,
+            'date_local': local_date_string(consumed_at_utc, tz),
+            'consumed_at': consumed_at_utc,
+            'created_at': current_utc,
+            'updated_at': current_utc,
+            'photo': {
+                'storage_path': None,
+                'width': None,
+                'height': None,
+            },
+            'items': items,
+            'totals': totals,
+            'manual_created': True,
+            'manual_edited': True,
+            'llm': {
+                'provider': None,
+                'model': None,
+                'estimated': False,
+                'notes': 'manual meal',
+            },
+        }
+        self.repo.create(uid, meal_id, meal)
+        return self._meal_response(meal)
+
+    def search_product_suggestions(
+        self,
+        uid: str,
+        query: str | None,
+        page: int,
+        page_size: int,
+    ) -> dict:
+        normalized_query = (query or '').strip().lower()
+        safe_page = max(page, 1)
+        safe_page_size = min(max(page_size, 1), 50)
+        meals = self.repo.list_recent(uid, limit=500)
+
+        products: dict[str, dict] = {}
+        for meal in meals:
+            consumed_at = meal.get('consumed_at')
+            for item in meal.get('items', []):
+                name = str(item.get('product_name') or '').strip().lower()
+                if not name:
+                    continue
+                if normalized_query and normalized_query not in name:
+                    continue
+
+                portion_g = self._float_or_zero(item.get('portion_g'))
+                kcal_per_100g = self._float_or_zero(item.get('kcal_per_100g'))
+                existing = products.setdefault(
+                    name,
+                    {
+                        'product_name': name,
+                        'kcal_weighted_sum': 0.0,
+                        'portion_sum': 0.0,
+                        'times_used': 0,
+                        'last_used_at': None,
+                    },
+                )
+                existing['times_used'] += 1
+                existing['portion_sum'] += portion_g
+                if portion_g > 0:
+                    existing['kcal_weighted_sum'] += kcal_per_100g * portion_g
+                elif kcal_per_100g > 0:
+                    existing['kcal_weighted_sum'] += kcal_per_100g
+                    existing['portion_sum'] += 1
+                if consumed_at and (existing['last_used_at'] is None or consumed_at > existing['last_used_at']):
+                    existing['last_used_at'] = consumed_at
+
+        suggestions = []
+        for product in products.values():
+            portion_sum = product['portion_sum']
+            times_used = product['times_used']
+            suggestions.append({
+                'product_name': product['product_name'],
+                'kcal_per_100g': round(product['kcal_weighted_sum'] / portion_sum, 1) if portion_sum else 100.0,
+                'times_used': times_used,
+                'average_portion_g': round(portion_sum / times_used, 1) if times_used else 100.0,
+                'last_used_at': product['last_used_at'],
+            })
+
+        suggestions.sort(key=lambda item: (item['times_used'], item['last_used_at'] is not None, item['last_used_at']), reverse=True)
+        total = len(suggestions)
+        start = (safe_page - 1) * safe_page_size
+        end = start + safe_page_size
+        return {
+            'items': suggestions[start:end],
+            'page': safe_page,
+            'page_size': safe_page_size,
+            'total': total,
+            'has_next': end < total,
+        }
+
+    @staticmethod
+    def _float_or_zero(value) -> float:
+        try:
+            return float(value or 0)
+        except (TypeError, ValueError):
+            return 0.0
 
     async def _process_upload(self, photo: UploadFile):
         if photo.content_type not in {'image/jpeg', 'image/png', 'image/webp'}:
@@ -148,11 +268,6 @@ class MealService:
             update_data['meal_type'] = payload.meal_type.value
 
         if payload.consumed_at is not None:
-            if resulting_meal_type != MealType.SNACKS:
-                raise HTTPException(
-                    status_code=400,
-                    detail='Manual consumed_at change is allowed only for snacks',
-                )
             consumed_at_utc = payload.consumed_at.astimezone(timezone.utc)
             update_data['consumed_at'] = consumed_at_utc
             tz = self._resolve_tz(timezone_name)
@@ -183,7 +298,37 @@ class MealService:
         meal = self.repo.get(uid, meal_id)
         if meal is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Meal not found')
-        return self._meal_response(meal)
+        return self._meal_response(meal, include_photo_url=True)
+
+    def get_meal_photo_url(self, uid: str, meal_id: str) -> dict:
+        meal = self.repo.get(uid, meal_id)
+        if meal is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Meal not found')
+
+        storage_path = (meal.get('photo') or {}).get('storage_path')
+        if not storage_path:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Meal photo not found')
+
+        try:
+            signed_url = self.storage.create_signed_url(storage_path)
+        except SignedUrlError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail='Photo URL is temporarily unavailable',
+            ) from exc
+
+        if not signed_url:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail='Photo URL is temporarily unavailable',
+            )
+
+        return {
+            'meal_id': meal_id,
+            'storage_path': storage_path,
+            'signed_url': signed_url,
+            'expires_in_seconds': self.settings.signed_url_expires_seconds,
+        }
 
     def get_by_day(self, uid: str, date_local: str) -> dict:
         meals = self.repo.list_by_day(uid, date_local)

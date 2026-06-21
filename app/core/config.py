@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     )
     supabase_storage_bucket: str = Field(default='meal-photos', alias='SUPABASE_STORAGE_BUCKET')
     signed_url_expires_seconds: int = Field(default=3600, alias='SIGNED_URL_EXPIRES_SECONDS')
+    supabase_signed_url_timeout_seconds: float = Field(default=3.0, alias='SUPABASE_SIGNED_URL_TIMEOUT_SECONDS')
+    signed_url_cache_seconds: int = Field(default=900, alias='SIGNED_URL_CACHE_SECONDS')
 
     # Vendor-neutral LLM settings. The app uses the OpenAI-compatible Python client,
     # but LLM_BASE_URL may point to any OpenAI-compatible endpoint.
@@ -36,6 +38,14 @@ class Settings(BaseSettings):
         default='gpt-4.1-mini',
         validation_alias=AliasChoices('LLM_RECOMMENDATION_MODEL', 'OPENAI_RECOMMENDATION_MODEL'),
     )
+    llm_next_meal_recommendation_model: str = Field(
+        default='gpt-4.1-mini',
+        validation_alias=AliasChoices(
+            'LLM_NEXT_MEAL_RECOMMENDATION_MODEL',
+            'LLM_NEXT_MEAL_MODEL',
+            'OPENAI_NEXT_MEAL_RECOMMENDATION_MODEL',
+        ),
+    )
     llm_timeout_seconds: float = Field(default=45.0, validation_alias=AliasChoices('LLM_TIMEOUT_SECONDS', 'OPENAI_TIMEOUT_SECONDS'))
     llm_max_retries: int = Field(default=1, validation_alias=AliasChoices('LLM_MAX_RETRIES', 'OPENAI_MAX_RETRIES'))
 
@@ -45,6 +55,7 @@ class Settings(BaseSettings):
     webp_quality: int = Field(default=75, alias='WEBP_QUALITY')
 
     user_facing_ai_error: str = Field(default='Мы проебались, Босс.', alias='USER_FACING_AI_ERROR')
+    weekly_recommendation_limit: int = Field(default=3, alias='WEEKLY_RECOMMENDATION_LIMIT')
 
 
     @field_validator('supabase_url')

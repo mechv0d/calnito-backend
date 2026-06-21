@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, File, Form, Header, Query, UploadFile, status
 
 from app.auth.dependencies import CurrentUser, get_current_user
-from app.meals.models import DayMealsResponse, MealResponse, MealsRangeResponse, MealUpdateRequest, TodaySummaryResponse
+from app.meals.models import DayMealsResponse, ManualMealCreateRequest, MealPhotoUrlResponse, MealResponse, MealsRangeResponse, MealUpdateRequest, ProductSuggestionsResponse, TodaySummaryResponse
 from app.meals.service import MealService
 
 router = APIRouter(prefix='/meals', tags=['meals'])
@@ -19,6 +19,34 @@ async def create_meal(
         description=description,
         timezone_name=timezone_name,
         photo=photo,
+    )
+
+
+@router.post('/manual', response_model=MealResponse, status_code=status.HTTP_201_CREATED)
+def create_manual_meal(
+    payload: ManualMealCreateRequest,
+    timezone_name: str | None = Header(default=None, alias='X-Timezone'),
+    user: CurrentUser = Depends(get_current_user),
+):
+    return MealService().create_manual_meal(
+        uid=user.uid,
+        payload=payload,
+        timezone_name=timezone_name,
+    )
+
+
+@router.get('/products/popular', response_model=ProductSuggestionsResponse)
+def search_popular_products(
+    q: str | None = Query(default=None, max_length=120),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=50),
+    user: CurrentUser = Depends(get_current_user),
+):
+    return MealService().search_product_suggestions(
+        uid=user.uid,
+        query=q,
+        page=page,
+        page_size=page_size,
     )
 
 
@@ -55,6 +83,14 @@ def get_meals_by_day(
     user: CurrentUser = Depends(get_current_user),
 ):
     return MealService().get_by_day(uid=user.uid, date_local=date)
+
+
+@router.get('/{meal_id}/photo-url', response_model=MealPhotoUrlResponse)
+def get_meal_photo_url(
+    meal_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    return MealService().get_meal_photo_url(uid=user.uid, meal_id=meal_id)
 
 
 @router.get('/{meal_id}', response_model=MealResponse)

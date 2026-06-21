@@ -25,6 +25,8 @@ os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SECRET_KEY", "sb_secret_test")
 os.environ.setdefault("SUPABASE_STORAGE_BUCKET", "meal-photos")
 os.environ.setdefault("SIGNED_URL_EXPIRES_SECONDS", "3600")
+os.environ.setdefault("SUPABASE_SIGNED_URL_TIMEOUT_SECONDS", "3")
+os.environ.setdefault("SIGNED_URL_CACHE_SECONDS", "900")
 os.environ.setdefault("LLM_API_KEY", "test-llm-key")
 os.environ.setdefault("LLM_MODEL", "test-food-model")
 os.environ.setdefault("LLM_RECOMMENDATION_MODEL", "test-recommendation-model")
@@ -203,17 +205,19 @@ def clear_cached_settings_and_clients(monkeypatch: pytest.MonkeyPatch):
     """Each test starts with fresh settings and no cached cloud clients."""
     from app.core.config import get_settings
     from app.core.firebase import get_firebase_app, get_firestore_client
-    from app.storage.supabase_storage import get_supabase_client
+    from app.storage.supabase_storage import clear_signed_url_cache, get_supabase_client
 
     get_settings.cache_clear()
     get_firebase_app.cache_clear()
     get_firestore_client.cache_clear()
     get_supabase_client.cache_clear()
+    clear_signed_url_cache()
     yield
     get_settings.cache_clear()
     get_firebase_app.cache_clear()
     get_firestore_client.cache_clear()
     get_supabase_client.cache_clear()
+    clear_signed_url_cache()
 
 
 @pytest.fixture

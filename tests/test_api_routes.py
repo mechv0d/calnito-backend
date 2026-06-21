@@ -56,6 +56,14 @@ class FakeMealService:
     def get_meal(self, uid, meal_id):
         return MEAL_RESPONSE
 
+    def get_meal_photo_url(self, uid, meal_id):
+        return {
+            "meal_id": meal_id,
+            "storage_path": "users/u1/meals/meal-1/photo.webp",
+            "signed_url": "https://signed.test/photo.webp",
+            "expires_in_seconds": 3600,
+        }
+
     def update_meal(self, uid, meal_id, payload, timezone_name):
         return {**MEAL_RESPONSE, "meal_type": payload.meal_type or MEAL_RESPONSE["meal_type"]}
 
@@ -124,6 +132,7 @@ def test_meals_endpoints(monkeypatch):
         assert client.get("/v1/meals/by-day?date=2026-06-19").json()["date"] == "2026-06-19"
         assert client.get("/v1/meals?from=2026-06-19&to=2026-06-19").json()["total_calories"] == 277.2
         assert client.get("/v1/meals/meal-1").json()["id"] == "meal-1"
+        assert client.get("/v1/meals/meal-1/photo-url").json()["signed_url"] == "https://signed.test/photo.webp"
         assert client.patch("/v1/meals/meal-1", json={"meal_type": "snacks"}).json()["meal_type"] == "snacks"
         assert client.delete("/v1/meals/meal-1").json() == {"ok": True, "deleted_id": "meal-1"}
 

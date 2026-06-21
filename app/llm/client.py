@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from app.common.enums import MealType
 from app.core.config import get_settings
 from app.llm.exceptions import AIExhaustedError
-from app.llm.prompts import build_food_parse_prompt, build_recommendation_prompt
+from app.llm.prompts import build_food_parse_prompt, build_next_meal_recommendation_prompt, build_recommendation_prompt
 from app.llm.schemas import FOOD_PARSE_JSON_SCHEMA, ParsedMeal
 
 from app.llm.food_response_normalizer import normalize_food_parse_payload
@@ -134,14 +134,27 @@ class AIClient:
         return ParsedMeal.model_validate(normalized_data)
 
     def generate_recommendations(self, payload: dict) -> str:
-        prompt = build_recommendation_prompt(payload)
+        return self._generate_text_recommendation(
+            prompt=build_recommendation_prompt(payload),
+            model=self.settings.llm_recommendation_model,
+            log_label='general recommendation',
+        )
+
+    def generate_next_meal_recommendation(self, payload: dict) -> str:
+        return self._generate_text_recommendation(
+            prompt=build_next_meal_recommendation_prompt(payload),
+            model=self.settings.llm_next_meal_recommendation_model,
+            log_label='next meal recommendation',
+        )
+
+    def _generate_text_recommendation(self, prompt: str, model: str, log_label: str) -> str:
         attempts = self.settings.llm_max_retries + 1
         last_error: Exception | None = None
 
         for attempt in range(1, attempts + 1):
             try:
                 response = self.client.chat.completions.create(
-                    model=self.settings.llm_recommendation_model,
+                    model=model,
                     messages=[
                         {
                             'role': 'system',
@@ -157,8 +170,8 @@ class AIClient:
                 return content.strip()
             except Exception as exc:
                 last_error = exc
-                logger.warning('Recommendation AI failed on attempt %s/%s: %r', attempt, attempts, exc)
+                logger.warning('%s AI failed on attempt %s/%s: %r', log_label, attempt, attempts, exc)
                 if attempt < attempts:
                     time.sleep(min(0.5 * attempt, 2.0))
 
-        raise AIExhaustedError('Recommendation AI failed after all retries') from last_error
+        raise AIExhaustedError(f'{log_label} AI failed after all retries') from last_error
