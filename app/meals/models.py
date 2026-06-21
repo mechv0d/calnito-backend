@@ -71,6 +71,8 @@ class MealResponse(BaseModel):
     items: list[MealItemResponse]
     totals: MealTotals
     photo: PhotoInfo | None = None
+    processing_status: str = Field(default='completed')
+    processing_error: str | None = None
 
 
 class MealUpdateRequest(BaseModel):

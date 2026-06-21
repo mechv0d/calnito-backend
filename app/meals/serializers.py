@@ -56,4 +56,6 @@ def meal_to_response_dict(
             'width': photo.get('width'),
             'height': photo.get('height'),
         } if storage_path else None,
+        'processing_status': meal.get('processing_status') or 'completed',
+        'processing_error': meal.get('processing_error'),
     }

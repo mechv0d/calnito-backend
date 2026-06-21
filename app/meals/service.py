@@ -45,7 +45,13 @@ class MealService:
         description: str,
         timezone_name: str | None,
         photo: UploadFile | None,
+        background_tasks=None,
     ) -> dict:
+        """Create a server-side pending meal and finish AI parsing in background.
+
+        The HTTP request now returns as soon as the user input is safely stored.
+        Closing the browser tab no longer cancels the long LLM parse request.
+        """
         tz = self._resolve_tz(timezone_name)
         current_utc = now_utc()
         current_local = current_utc.astimezone(tz)
@@ -72,20 +78,6 @@ class MealService:
                     'height': processed.height,
                 }
 
-            recent_products = self.context.recent_products(uid, limit=10)
-            same_type_products = self.context.recent_products_by_type(uid, meal_type, limit=10)
-
-            parsed = self.ai.parse_food(
-                description=description,
-                meal_type=meal_type,
-                recent_products=recent_products,
-                same_type_products=same_type_products,
-                image_webp_bytes=webp_bytes,
-            )
-
-            items = build_items_from_parsed(parsed)
-            totals = calculate_totals(items)
-
             meal = {
                 'id': meal_id,
                 'uid': uid,
@@ -96,26 +88,102 @@ class MealService:
                 'created_at': current_utc,
                 'updated_at': current_utc,
                 'photo': photo_doc,
+                'items': [],
+                'totals': {
+                    'calories': 0.0,
+                    'products_count': 0,
+                    'total_weight_g': 0.0,
+                },
+                'processing_status': 'processing',
+                'processing_error': None,
+                'llm': {
+                    'provider': 'openai',
+                    'model': self.settings.llm_model,
+                    'estimated': True,
+                    'notes': 'AI parse queued',
+                },
+            }
+            self.repo.create(uid, meal_id, meal)
+
+            if background_tasks is not None:
+                background_tasks.add_task(
+                    complete_ai_meal_task,
+                    uid=uid,
+                    meal_id=meal_id,
+                    description=description,
+                    meal_type_value=meal_type.value,
+                    image_webp_bytes=webp_bytes,
+                )
+            else:
+                # Keeps tests and non-FastAPI callers functional.
+                self.complete_ai_meal(
+                    uid=uid,
+                    meal_id=meal_id,
+                    description=description,
+                    meal_type_value=meal_type.value,
+                    image_webp_bytes=webp_bytes,
+                )
+                completed = self.repo.get(uid, meal_id) or meal
+                return self._meal_response(completed, include_photo_url=True)
+
+            return self._meal_response(meal, include_photo_url=False)
+        except Exception:
+            if uploaded_storage_path:
+                self.storage.remove_file(uploaded_storage_path)
+            raise
+
+    def complete_ai_meal(
+        self,
+        uid: str,
+        meal_id: str,
+        description: str,
+        meal_type_value: str,
+        image_webp_bytes: bytes | None = None,
+    ) -> None:
+        """Finish queued AI parsing without depending on the browser request."""
+        existing = self.repo.get(uid, meal_id)
+        if existing is None:
+            return
+
+        try:
+            meal_type = MealType(meal_type_value)
+            recent_products = self.context.recent_products(uid, limit=10)
+            same_type_products = self.context.recent_products_by_type(uid, meal_type, limit=10)
+
+            parsed = self.ai.parse_food(
+                description=description,
+                meal_type=meal_type,
+                recent_products=recent_products,
+                same_type_products=same_type_products,
+                image_webp_bytes=image_webp_bytes,
+            )
+
+            items = build_items_from_parsed(parsed)
+            self.repo.update(uid, meal_id, {
                 'items': items,
-                'totals': totals,
+                'totals': calculate_totals(items),
+                'updated_at': now_utc(),
+                'processing_status': 'completed',
+                'processing_error': None,
                 'llm': {
                     'provider': 'openai',
                     'model': self.settings.llm_model,
                     'estimated': True,
                     'notes': parsed.notes,
                 },
-            }
-
-            self.repo.create(uid, meal_id, meal)
-            return self._meal_response(meal, include_photo_url=True)
-        except AIExhaustedError as exc:
-            if uploaded_storage_path:
-                self.storage.remove_file(uploaded_storage_path)
-            raise ai_failed_exception() from exc
-        except Exception:
-            if uploaded_storage_path:
-                self.storage.remove_file(uploaded_storage_path)
-            raise
+            })
+        except Exception as exc:
+            self.repo.update(uid, meal_id, {
+                'updated_at': now_utc(),
+                'processing_status': 'failed',
+                'processing_error': getattr(self.settings, 'user_facing_ai_error', 'Мы проебались, Босс.'),
+                'llm': {
+                    'provider': 'openai',
+                    'model': self.settings.llm_model,
+                    'estimated': True,
+                    'notes': repr(exc),
+                },
+            })
 
     def create_manual_meal(
         self,
@@ -148,6 +216,8 @@ class MealService:
             'totals': totals,
             'manual_created': True,
             'manual_edited': True,
+            'processing_status': 'completed',
+            'processing_error': None,
             'llm': {
                 'provider': None,
                 'model': None,
@@ -375,3 +445,19 @@ class MealService:
             return get_zoneinfo(timezone_name)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail='Invalid timezone') from exc
+
+
+def complete_ai_meal_task(
+    uid: str,
+    meal_id: str,
+    description: str,
+    meal_type_value: str,
+    image_webp_bytes: bytes | None = None,
+) -> None:
+    MealService().complete_ai_meal(
+        uid=uid,
+        meal_id=meal_id,
+        description=description,
+        meal_type_value=meal_type_value,
+        image_webp_bytes=image_webp_bytes,
+    )

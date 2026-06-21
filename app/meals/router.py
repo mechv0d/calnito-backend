@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, Form, Header, Query, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Header, Query, UploadFile, status
 
 from app.auth.dependencies import CurrentUser, get_current_user
 from app.meals.models import DayMealsResponse, ManualMealCreateRequest, MealPhotoUrlResponse, MealResponse, MealsRangeResponse, MealUpdateRequest, ProductSuggestionsResponse, TodaySummaryResponse
@@ -9,6 +9,7 @@ router = APIRouter(prefix='/meals', tags=['meals'])
 
 @router.post('', response_model=MealResponse, status_code=status.HTTP_201_CREATED)
 async def create_meal(
+    background_tasks: BackgroundTasks,
     description: str = Form(..., min_length=1, max_length=2000),
     photo: UploadFile | None = File(default=None),
     timezone_name: str | None = Header(default=None, alias='X-Timezone'),
@@ -19,6 +20,7 @@ async def create_meal(
         description=description,
         timezone_name=timezone_name,
         photo=photo,
+        background_tasks=background_tasks,
     )
 
 
