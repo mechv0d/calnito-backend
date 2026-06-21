@@ -3,10 +3,14 @@ from app.storage.supabase_storage import StorageService
 
 
 def meal_to_response_dict(meal: dict, storage: StorageService | None = None) -> dict:
-    storage = storage or StorageService()
     meal_type = MealType(meal['meal_type'])
     photo = meal.get('photo') or {}
     storage_path = photo.get('storage_path')
+    signed_url = None
+
+    if storage_path:
+        storage = storage or StorageService()
+        signed_url = storage.create_signed_url(storage_path)
 
     return {
         'id': meal['id'],
@@ -21,7 +25,7 @@ def meal_to_response_dict(meal: dict, storage: StorageService | None = None) -> 
         'totals': meal.get('totals', {'calories': 0, 'products_count': 0, 'total_weight_g': 0}),
         'photo': {
             'storage_path': storage_path,
-            'signed_url': storage.create_signed_url(storage_path),
+            'signed_url': signed_url,
             'width': photo.get('width'),
             'height': photo.get('height'),
         } if storage_path else None,

@@ -22,9 +22,18 @@ class MealService:
     def __init__(self) -> None:
         self.settings = get_settings()
         self.repo = MealRepository()
-        self.storage = StorageService()
+        self._storage: StorageService | None = None
         self.context = FoodContextService(self.repo)
         self.ai = AIClient()
+
+    @property
+    def storage(self) -> StorageService:
+        if self._storage is None:
+            self._storage = StorageService()
+        return self._storage
+
+    def _meal_response(self, meal: dict) -> dict:
+        return meal_to_response_dict(meal, self._storage)
 
     async def create_meal(
         self,
@@ -94,12 +103,14 @@ class MealService:
             }
 
             self.repo.create(uid, meal_id, meal)
-            return meal_to_response_dict(meal, self.storage)
+            return self._meal_response(meal)
         except AIExhaustedError as exc:
-            self.storage.remove_file(uploaded_storage_path)
+            if uploaded_storage_path:
+                self.storage.remove_file(uploaded_storage_path)
             raise ai_failed_exception() from exc
         except Exception:
-            self.storage.remove_file(uploaded_storage_path)
+            if uploaded_storage_path:
+                self.storage.remove_file(uploaded_storage_path)
             raise
 
     async def _process_upload(self, photo: UploadFile):
@@ -157,24 +168,26 @@ class MealService:
         if updated is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Meal not found')
 
-        return meal_to_response_dict(updated, self.storage)
+        return self._meal_response(updated)
 
     def delete_meal(self, uid: str, meal_id: str) -> dict:
         deleted = self.repo.delete(uid, meal_id)
         if deleted is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Meal not found')
-        self.storage.remove_file((deleted.get('photo') or {}).get('storage_path'))
+        storage_path = (deleted.get('photo') or {}).get('storage_path')
+        if storage_path:
+            self.storage.remove_file(storage_path)
         return {'ok': True, 'deleted_id': meal_id}
 
     def get_meal(self, uid: str, meal_id: str) -> dict:
         meal = self.repo.get(uid, meal_id)
         if meal is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Meal not found')
-        return meal_to_response_dict(meal, self.storage)
+        return self._meal_response(meal)
 
     def get_by_day(self, uid: str, date_local: str) -> dict:
         meals = self.repo.list_by_day(uid, date_local)
-        responses = [meal_to_response_dict(meal, self.storage) for meal in meals]
+        responses = [self._meal_response(meal) for meal in meals]
         return {
             'date': date_local,
             'meals': responses,
@@ -184,7 +197,7 @@ class MealService:
 
     def get_between_days(self, uid: str, date_from: str, date_to: str) -> dict:
         meals = self.repo.list_between_days(uid, date_from, date_to)
-        responses = [meal_to_response_dict(meal, self.storage) for meal in meals]
+        responses = [self._meal_response(meal) for meal in meals]
         return {
             'date_from': date_from,
             'date_to': date_to,
@@ -209,7 +222,7 @@ class MealService:
             'total_calories': round(sum(float(meal['totals']['calories']) for meal in meals), 1),
             'by_meal_type': by_type,
             'meals_count': len(meals),
-            'meals': [meal_to_response_dict(meal, self.storage) for meal in meals],
+            'meals': [self._meal_response(meal) for meal in meals],
         }
 
     def _resolve_tz(self, timezone_name: str | None):
